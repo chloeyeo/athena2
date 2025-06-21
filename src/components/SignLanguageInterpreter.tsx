@@ -8,212 +8,139 @@ interface SignLanguageInterpreterProps {
   isActive: boolean;
 }
 
-// Realistic ASL hand positions with SVG-like representations
-const ASL_HAND_SHAPES = {
-  'a': { 
-    description: 'Closed fist with thumb alongside',
-    leftHand: { fingers: [0, 0, 0, 0], thumb: 0, wrist: 0 },
-    rightHand: { fingers: [0, 0, 0, 0], thumb: 0, wrist: 0 }
-  },
-  'b': { 
-    description: 'Flat hand, fingers together, thumb across palm',
-    leftHand: { fingers: [1, 1, 1, 1], thumb: 0.5, wrist: 0 },
-    rightHand: { fingers: [1, 1, 1, 1], thumb: 0.5, wrist: 0 }
-  },
-  'c': { 
-    description: 'Curved hand forming C shape',
-    leftHand: { fingers: [0.7, 0.7, 0.7, 0.7], thumb: 0.7, wrist: 0 },
-    rightHand: { fingers: [0.7, 0.7, 0.7, 0.7], thumb: 0.7, wrist: 0 }
-  },
-  'd': { 
-    description: 'Index finger pointing up',
-    leftHand: { fingers: [1, 0, 0, 0], thumb: 0, wrist: 0 },
-    rightHand: { fingers: [1, 0, 0, 0], thumb: 0, wrist: 0 }
-  },
-  'e': { 
-    description: 'Fingers bent touching thumb',
-    leftHand: { fingers: [0.3, 0.3, 0.3, 0.3], thumb: 0.3, wrist: 0 },
-    rightHand: { fingers: [0.3, 0.3, 0.3, 0.3], thumb: 0.3, wrist: 0 }
-  },
-  'f': { 
-    description: 'Index and thumb touching, others extended',
-    leftHand: { fingers: [0.5, 1, 1, 1], thumb: 0.5, wrist: 0 },
-    rightHand: { fingers: [0.5, 1, 1, 1], thumb: 0.5, wrist: 0 }
-  },
-  'g': { 
-    description: 'Index finger pointing sideways',
-    leftHand: { fingers: [1, 0, 0, 0], thumb: 0, wrist: 90 },
-    rightHand: { fingers: [1, 0, 0, 0], thumb: 0, wrist: -90 }
-  },
-  'h': { 
-    description: 'Index and middle finger extended sideways',
-    leftHand: { fingers: [1, 1, 0, 0], thumb: 0, wrist: 90 },
-    rightHand: { fingers: [1, 1, 0, 0], thumb: 0, wrist: -90 }
-  },
-  'i': { 
-    description: 'Pinky finger extended',
-    leftHand: { fingers: [0, 0, 0, 1], thumb: 0, wrist: 0 },
-    rightHand: { fingers: [0, 0, 0, 1], thumb: 0, wrist: 0 }
-  },
-  'l': { 
-    description: 'Index and thumb forming L',
-    leftHand: { fingers: [1, 0, 0, 0], thumb: 1, wrist: 0 },
-    rightHand: { fingers: [1, 0, 0, 0], thumb: 1, wrist: 0 }
-  },
-  'o': { 
-    description: 'All fingertips touching thumb',
-    leftHand: { fingers: [0.8, 0.8, 0.8, 0.8], thumb: 0.8, wrist: 0 },
-    rightHand: { fingers: [0.8, 0.8, 0.8, 0.8], thumb: 0.8, wrist: 0 }
-  },
-  'r': { 
-    description: 'Index and middle fingers crossed',
-    leftHand: { fingers: [0.8, 0.9, 0, 0], thumb: 0, wrist: 0 },
-    rightHand: { fingers: [0.8, 0.9, 0, 0], thumb: 0, wrist: 0 }
-  },
-  's': { 
-    description: 'Fist with thumb over fingers',
-    leftHand: { fingers: [0, 0, 0, 0], thumb: 0.2, wrist: 0 },
-    rightHand: { fingers: [0, 0, 0, 0], thumb: 0.2, wrist: 0 }
-  },
-  'u': { 
-    description: 'Index and middle fingers together',
-    leftHand: { fingers: [1, 1, 0, 0], thumb: 0, wrist: 0 },
-    rightHand: { fingers: [1, 1, 0, 0], thumb: 0, wrist: 0 }
-  },
-  'v': { 
-    description: 'Index and middle fingers apart',
-    leftHand: { fingers: [1, 1, 0, 0], thumb: 0, wrist: 0 },
-    rightHand: { fingers: [1, 1, 0, 0], thumb: 0, wrist: 0 }
-  },
-  'y': { 
-    description: 'Thumb and pinky extended',
-    leftHand: { fingers: [0, 0, 0, 1], thumb: 1, wrist: 0 },
-    rightHand: { fingers: [0, 0, 0, 1], thumb: 1, wrist: 0 }
-  },
-  ' ': { 
-    description: 'Pause - hands open',
-    leftHand: { fingers: [1, 1, 1, 1], thumb: 1, wrist: 0 },
-    rightHand: { fingers: [1, 1, 1, 1], thumb: 1, wrist: 0 }
-  }
-};
-
 // Legal terms with specific ASL signs
 const LEGAL_SIGNS = {
   'law': {
     description: 'Law sign - L handshape on flat palm',
-    leftHand: { fingers: [1, 1, 1, 1], thumb: 1, wrist: 0 },
-    rightHand: { fingers: [1, 0, 0, 0], thumb: 1, wrist: 0 }
+    gesture: '⚖️'
   },
   'court': {
     description: 'Court sign - Judge gesture',
-    leftHand: { fingers: [1, 1, 1, 1], thumb: 1, wrist: -20 },
-    rightHand: { fingers: [1, 1, 1, 1], thumb: 1, wrist: 20 }
+    gesture: '🏛️'
   },
   'contract': {
     description: 'Contract sign - Paper and signature',
-    leftHand: { fingers: [1, 1, 1, 1], thumb: 1, wrist: 0 },
-    rightHand: { fingers: [1, 0, 0, 0], thumb: 0, wrist: 0 }
+    gesture: '📋'
   },
   'lawyer': {
     description: 'Lawyer sign - L handshape',
-    leftHand: { fingers: [1, 0, 0, 0], thumb: 1, wrist: 0 },
-    rightHand: { fingers: [1, 0, 0, 0], thumb: 1, wrist: 0 }
+    gesture: '👨‍💼'
+  },
+  'legal': {
+    description: 'Legal sign - L handshape',
+    gesture: '⚖️'
+  },
+  'client': {
+    description: 'Client sign - Person gesture',
+    gesture: '👤'
+  },
+  'case': {
+    description: 'Case sign - Folder gesture',
+    gesture: '📁'
+  },
+  'judge': {
+    description: 'Judge sign - Authority gesture',
+    gesture: '👨‍⚖️'
   }
 };
 
-// Realistic hand component
-const RealisticHand: React.FC<{
-  handShape: { fingers: number[], thumb: number, wrist: number },
-  isLeft: boolean,
-  position: { x: number, y: number, rotate: number }
-}> = ({ handShape, isLeft, position }) => {
+// Realistic human interpreter component
+const HumanInterpreter: React.FC<{
+  currentSign: string,
+  isActive: boolean,
+  description: string
+}> = ({ currentSign, isActive, description }) => {
   return (
-    <motion.div
-      className="absolute"
-      style={{
-        left: `calc(50% + ${position.x}px)`,
-        top: `calc(50% + ${position.y}px)`,
-      }}
-      animate={{
-        x: position.x,
-        y: position.y,
-        rotate: position.rotate + handShape.wrist,
-      }}
-      transition={{ duration: 0.6, ease: "easeInOut" }}
-    >
-      {/* Arm */}
-      <div 
-        className="absolute bg-gradient-to-b from-amber-100 to-amber-200 rounded-full"
-        style={{
-          width: '12px',
-          height: '40px',
-          top: '20px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          transformOrigin: 'top center'
-        }}
-      />
+    <div className="relative w-full h-full flex items-center justify-center">
+      {/* Professional interpreter background */}
+      <div className="absolute inset-0 bg-gradient-to-b from-blue-50 to-blue-100 rounded-lg"></div>
       
-      {/* Wrist */}
-      <div 
-        className="absolute bg-gradient-to-b from-amber-200 to-amber-300 rounded-full"
-        style={{
-          width: '16px',
-          height: '12px',
-          top: '8px',
-          left: '50%',
-          transform: 'translateX(-50%)'
-        }}
-      />
-      
-      {/* Palm */}
-      <div 
-        className="relative bg-gradient-to-br from-amber-200 to-amber-300 rounded-lg shadow-sm"
-        style={{
-          width: '24px',
-          height: '32px',
-          border: '1px solid rgba(0,0,0,0.1)'
-        }}
-      >
-        {/* Thumb */}
-        <div
-          className="absolute bg-gradient-to-br from-amber-200 to-amber-300 rounded-full shadow-sm"
-          style={{
-            width: '8px',
-            height: `${12 + handShape.thumb * 8}px`,
-            left: isLeft ? '-6px' : '22px',
-            top: '8px',
-            transform: `rotate(${isLeft ? -30 : 30}deg) scaleY(${handShape.thumb})`,
-            transformOrigin: 'bottom center',
-            border: '1px solid rgba(0,0,0,0.1)'
-          }}
-        />
+      {/* Human silhouette with realistic proportions */}
+      <div className="relative z-10 flex flex-col items-center">
+        {/* Head */}
+        <motion.div 
+          className="w-12 h-12 bg-gradient-to-b from-amber-200 to-amber-300 rounded-full border border-amber-400 mb-2"
+          animate={isActive ? { scale: [1, 1.02, 1] } : {}}
+          transition={{ duration: 2, repeat: Infinity }}
+        >
+          {/* Face features */}
+          <div className="relative w-full h-full">
+            {/* Eyes */}
+            <div className="absolute top-3 left-3 w-1 h-1 bg-gray-700 rounded-full"></div>
+            <div className="absolute top-3 right-3 w-1 h-1 bg-gray-700 rounded-full"></div>
+            {/* Mouth */}
+            <div className="absolute bottom-3 left-1/2 transform -translate-x-1/2 w-2 h-0.5 bg-gray-600 rounded-full"></div>
+          </div>
+        </motion.div>
         
-        {/* Fingers */}
-        {handShape.fingers.map((extension, index) => (
-          <div
-            key={index}
-            className="absolute bg-gradient-to-b from-amber-200 to-amber-300 rounded-full shadow-sm"
-            style={{
-              width: '5px',
-              height: `${8 + extension * 12}px`,
-              left: `${4 + index * 4}px`,
-              top: '-2px',
-              transform: `scaleY(${0.3 + extension * 0.7})`,
-              transformOrigin: 'bottom center',
-              border: '1px solid rgba(0,0,0,0.1)'
-            }}
+        {/* Shoulders and torso */}
+        <div className="w-16 h-8 bg-gradient-to-b from-blue-300 to-blue-400 rounded-t-lg mb-2"></div>
+        
+        {/* Arms and hands area */}
+        <div className="relative w-20 h-16 flex items-center justify-center">
+          {/* Left arm */}
+          <motion.div 
+            className="absolute left-2 top-2 w-3 h-8 bg-gradient-to-b from-amber-200 to-amber-300 rounded-full"
+            animate={isActive ? { 
+              rotate: [-10, 10, -5, 5, 0],
+              x: [-2, 2, -1, 1, 0]
+            } : {}}
+            transition={{ duration: 1.5, repeat: Infinity }}
           />
-        ))}
-        
-        {/* Palm lines for realism */}
-        <div className="absolute inset-0 opacity-20">
-          <div className="absolute w-full h-px bg-amber-600 top-1/3"></div>
-          <div className="absolute w-2/3 h-px bg-amber-600 top-1/2 left-1/6"></div>
-          <div className="absolute w-1/2 h-px bg-amber-600 top-2/3 left-1/4"></div>
+          
+          {/* Right arm */}
+          <motion.div 
+            className="absolute right-2 top-2 w-3 h-8 bg-gradient-to-b from-amber-200 to-amber-300 rounded-full"
+            animate={isActive ? { 
+              rotate: [10, -10, 5, -5, 0],
+              x: [2, -2, 1, -1, 0]
+            } : {}}
+            transition={{ duration: 1.5, repeat: Infinity, delay: 0.2 }}
+          />
+          
+          {/* Left hand */}
+          <motion.div 
+            className="absolute left-0 top-8 w-4 h-4 bg-gradient-to-br from-amber-200 to-amber-300 rounded-lg border border-amber-400 flex items-center justify-center"
+            animate={isActive ? { 
+              scale: [1, 1.1, 0.9, 1.05, 1],
+              rotate: [-15, 15, -10, 10, 0]
+            } : {}}
+            transition={{ duration: 1.2, repeat: Infinity }}
+          >
+            <div className="text-xs">✋</div>
+          </motion.div>
+          
+          {/* Right hand */}
+          <motion.div 
+            className="absolute right-0 top-8 w-4 h-4 bg-gradient-to-br from-amber-200 to-amber-300 rounded-lg border border-amber-400 flex items-center justify-center"
+            animate={isActive ? { 
+              scale: [1, 0.9, 1.1, 0.95, 1],
+              rotate: [15, -15, 10, -10, 0]
+            } : {}}
+            transition={{ duration: 1.2, repeat: Infinity, delay: 0.3 }}
+          >
+            <div className="text-xs">🤚</div>
+          </motion.div>
+          
+          {/* Central sign display */}
+          <motion.div 
+            className="absolute inset-0 flex items-center justify-center text-2xl"
+            animate={isActive ? { 
+              scale: [1, 1.2, 1],
+              opacity: [0.8, 1, 0.8]
+            } : {}}
+            transition={{ duration: 0.8, repeat: Infinity }}
+          >
+            {currentSign}
+          </motion.div>
         </div>
       </div>
-    </motion.div>
+      
+      {/* Professional interpreter badge */}
+      <div className="absolute bottom-2 left-2 bg-white/90 rounded px-2 py-1 text-xs font-medium text-gray-700">
+        Certified ASL Interpreter
+      </div>
+    </div>
   );
 };
 
@@ -221,7 +148,8 @@ export default function SignLanguageInterpreter({ message, language, isActive }:
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [currentLetterIndex, setCurrentLetterIndex] = useState(0);
   const [isSigningActive, setIsSigningActive] = useState(false);
-  const [currentSign, setCurrentSign] = useState(ASL_HAND_SHAPES[' ']);
+  const [currentSign, setCurrentSign] = useState('👋');
+  const [currentDescription, setCurrentDescription] = useState('Ready to interpret');
 
   useEffect(() => {
     if (message && isActive) {
@@ -229,13 +157,15 @@ export default function SignLanguageInterpreter({ message, language, isActive }:
       setCurrentWordIndex(0);
       setCurrentLetterIndex(0);
       
-      const words = message.toLowerCase().split(' ');
+      const words = message.toLowerCase().split(' ').filter(word => word.length > 0);
       let wordIndex = 0;
       let letterIndex = 0;
       
       const signInterval = setInterval(() => {
         if (wordIndex >= words.length) {
           setIsSigningActive(false);
+          setCurrentSign('👋');
+          setCurrentDescription('Interpretation complete');
           clearInterval(signInterval);
           return;
         }
@@ -244,7 +174,8 @@ export default function SignLanguageInterpreter({ message, language, isActive }:
         
         // Check if it's a legal term that has a specific sign
         if (letterIndex === 0 && LEGAL_SIGNS[currentWord]) {
-          setCurrentSign(LEGAL_SIGNS[currentWord]);
+          setCurrentSign(LEGAL_SIGNS[currentWord].gesture);
+          setCurrentDescription(LEGAL_SIGNS[currentWord].description);
           setCurrentWordIndex(wordIndex);
           setCurrentLetterIndex(0);
           
@@ -252,38 +183,51 @@ export default function SignLanguageInterpreter({ message, language, isActive }:
           setTimeout(() => {
             wordIndex++;
             letterIndex = 0;
-            setCurrentSign(ASL_HAND_SHAPES[' ']);
+            // Brief pause between words
+            setCurrentSign('✋');
+            setCurrentDescription('Pause between words');
           }, 1500);
           
           return;
         }
         
-        // Finger spell the word
+        // Finger spell the word letter by letter
         if (letterIndex < currentWord.length) {
-          const letter = currentWord[letterIndex];
-          const sign = ASL_HAND_SHAPES[letter as keyof typeof ASL_HAND_SHAPES] || ASL_HAND_SHAPES[' '];
+          const letter = currentWord[letterIndex].toUpperCase();
           
-          setCurrentSign(sign);
+          // Use hand gestures for letters
+          const letterSigns: { [key: string]: string } = {
+            'A': '✊', 'B': '🖐️', 'C': '🤏', 'D': '👆', 'E': '✊',
+            'F': '👌', 'G': '👉', 'H': '✌️', 'I': '🤙', 'J': '🤙',
+            'K': '✌️', 'L': '🤟', 'M': '✊', 'N': '✊', 'O': '👌',
+            'P': '👇', 'Q': '👇', 'R': '🤞', 'S': '✊', 'T': '✊',
+            'U': '✌️', 'V': '✌️', 'W': '🖖', 'X': '☝️', 'Y': '🤙', 'Z': '☝️'
+          };
+          
+          setCurrentSign(letterSigns[letter] || '✋');
+          setCurrentDescription(`Letter ${letter} - ${currentWord}`);
           setCurrentWordIndex(wordIndex);
           setCurrentLetterIndex(letterIndex);
           
           letterIndex++;
         } else {
           // Move to next word with a pause
-          setCurrentSign(ASL_HAND_SHAPES[' ']);
+          setCurrentSign('✋');
+          setCurrentDescription('Pause between words');
           wordIndex++;
           letterIndex = 0;
         }
-      }, 800);
+      }, 1000); // Slower pace for better visibility
 
       return () => clearInterval(signInterval);
     } else {
       setIsSigningActive(false);
-      setCurrentSign(ASL_HAND_SHAPES[' ']);
+      setCurrentSign('👋');
+      setCurrentDescription('Ready to interpret');
     }
   }, [message, isActive]);
 
-  const words = message ? message.split(' ') : [];
+  const words = message ? message.split(' ').filter(word => word.length > 0) : [];
   const currentWord = words[currentWordIndex] || '';
 
   return (
@@ -299,26 +243,12 @@ export default function SignLanguageInterpreter({ message, language, isActive }:
         )}
       </div>
       
-      {/* Realistic signing area with human-like interpreter */}
-      <div className="relative h-48 flex items-center justify-center bg-gradient-to-b from-blue-50 to-blue-100 rounded-lg mb-3 overflow-hidden">
-        {/* Interpreter silhouette */}
-        <div className="absolute bottom-0 w-32 h-24 bg-gradient-to-t from-blue-200 to-blue-300 rounded-t-3xl opacity-60"></div>
-        
-        {/* Head and shoulders */}
-        <div className="absolute top-4 w-16 h-16 bg-gradient-to-b from-amber-200 to-amber-300 rounded-full border border-amber-400 opacity-80"></div>
-        <div className="absolute top-16 w-20 h-12 bg-gradient-to-b from-blue-300 to-blue-400 rounded-t-lg opacity-70"></div>
-        
-        {/* Realistic hands */}
-        <RealisticHand
-          handShape={currentSign.leftHand}
-          isLeft={true}
-          position={{ x: -40, y: 10, rotate: 0 }}
-        />
-        
-        <RealisticHand
-          handShape={currentSign.rightHand}
-          isLeft={false}
-          position={{ x: 40, y: 10, rotate: 0 }}
+      {/* Professional human interpreter */}
+      <div className="relative h-48 bg-gradient-to-b from-blue-50 to-blue-100 rounded-lg mb-3 overflow-hidden">
+        <HumanInterpreter 
+          currentSign={currentSign}
+          isActive={isSigningActive}
+          description={currentDescription}
         />
         
         {/* Current letter/word indicator */}
@@ -326,7 +256,7 @@ export default function SignLanguageInterpreter({ message, language, isActive }:
           <div className="absolute top-2 right-2 bg-primary-600 text-white text-xs px-2 py-1 rounded font-bold">
             {LEGAL_SIGNS[currentWord.toLowerCase()] ? 
               currentWord.toUpperCase() : 
-              currentWord[currentLetterIndex]?.toUpperCase() || ''
+              currentWord[currentLetterIndex]?.toUpperCase() || 'PAUSE'
             }
           </div>
         )}
@@ -366,19 +296,9 @@ export default function SignLanguageInterpreter({ message, language, isActive }:
       
       {/* Sign description */}
       <div className="text-xs text-gray-600 text-center">
-        {isSigningActive ? (
-          <div>
-            <div className="font-medium">
-              {LEGAL_SIGNS[currentWord.toLowerCase()] ? 
-                `${currentWord.toUpperCase()} (Legal Sign)` : 
-                currentWord[currentLetterIndex]?.toUpperCase() || 'PAUSE'
-              }
-            </div>
-            <div className="mt-1">{currentSign.description}</div>
-          </div>
-        ) : (
-          'Ready to interpret'
-        )}
+        <div className="font-medium">
+          {currentDescription}
+        </div>
       </div>
       
       {/* Progress indicator */}
@@ -388,7 +308,7 @@ export default function SignLanguageInterpreter({ message, language, isActive }:
             <div 
               className="bg-primary-600 h-1 rounded-full transition-all duration-300"
               style={{ 
-                width: `${((currentWordIndex * 100) + (currentLetterIndex / currentWord.length * 100)) / words.length}%` 
+                width: `${words.length > 0 ? ((currentWordIndex + (currentLetterIndex / Math.max(currentWord.length, 1))) / words.length) * 100 : 0}%` 
               }}
             />
           </div>

@@ -33,192 +33,83 @@ export function useAudioRecording(): UseAudioRecordingReturn {
   const finalTranscriptRef = useRef<string>('');
   const isProcessingRef = useRef<boolean>(false);
   const speechStartTimeRef = useRef<number>(0);
-  const lastVoiceActivityRef = useRef<number>(0);
-  const voiceActivityBufferRef = useRef<number[]>([]);
+  const lastSpeechTimeRef = useRef<number>(0);
 
-  // Voice Activity Detection parameters
-  const VOICE_FREQUENCY_MIN = 85;    // Minimum Hz for human voice
-  const VOICE_FREQUENCY_MAX = 3400;  // Maximum Hz for human voice
-  const VOICE_ENERGY_THRESHOLD = 0.02; // Minimum energy for voice
-  const SILENCE_DURATION = 2000;     // 2 seconds of silence to finish
-  const MIN_SPEECH_DURATION = 1000;  // Minimum 1 second of speech
-  const VOICE_CONFIDENCE_THRESHOLD = 0.6; // 60% confidence it's voice
+  // Simplified but effective voice detection
+  const SILENCE_DURATION = 1500;     // 1.5 seconds of silence
+  const MIN_SPEECH_DURATION = 800;   // Minimum 0.8 seconds of speech
+  const AUDIO_THRESHOLD = 0.01;      // Minimum audio level
 
-  // Advanced Voice Activity Detection
-  const detectVoiceActivity = useCallback(() => {
+  // Simple but effective audio level monitoring
+  const monitorAudioLevel = useCallback(() => {
     if (!analyserRef.current || !isRecording) return;
 
     const bufferLength = analyserRef.current.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
-    const frequencyData = new Uint8Array(bufferLength);
     
     analyserRef.current.getByteTimeDomainData(dataArray);
-    analyserRef.current.getByteFrequencyData(frequencyData);
     
-    // Calculate overall audio level
-    const average = dataArray.reduce((sum, value) => sum + Math.abs(value - 128), 0) / bufferLength;
-    const normalizedLevel = average / 128;
-    setAudioLevel(normalizedLevel);
+    // Calculate RMS (Root Mean Square) for audio level
+    let sum = 0;
+    for (let i = 0; i < bufferLength; i++) {
+      const sample = (dataArray[i] - 128) / 128;
+      sum += sample * sample;
+    }
+    const rms = Math.sqrt(sum / bufferLength);
+    setAudioLevel(rms);
 
-    // Voice Activity Detection
-    const isVoiceDetected = analyzeVoiceActivity(frequencyData, normalizedLevel);
+    // Simple voice activity detection based on audio level
     const currentTime = Date.now();
+    const hasAudio = rms > AUDIO_THRESHOLD;
     
-    if (isVoiceDetected) {
-      lastVoiceActivityRef.current = currentTime;
+    if (hasAudio) {
+      lastSpeechTimeRef.current = currentTime;
       
       if (!isSpeaking) {
         speechStartTimeRef.current = currentTime;
         setIsSpeaking(true);
         setHasFinishedSpeaking(false);
-        console.log('🎤 Human voice detected - speech started');
+        console.log('🎤 Speech detected - level:', rms.toFixed(3));
       }
       
-      // Clear silence timeout
+      // Clear any existing silence timeout
       if (silenceTimeoutRef.current) {
         clearTimeout(silenceTimeoutRef.current);
         silenceTimeoutRef.current = null;
       }
-    } else {
-      // No voice detected
-      if (isSpeaking && !silenceTimeoutRef.current) {
-        // Start silence countdown
-        silenceTimeoutRef.current = setTimeout(() => {
-          const speechDuration = lastVoiceActivityRef.current - speechStartTimeRef.current;
-          
-          if (speechDuration >= MIN_SPEECH_DURATION && finalTranscriptRef.current.trim() && !isProcessingRef.current) {
-            console.log('✅ Speech finished - processing transcript:', finalTranscriptRef.current);
-            setIsSpeaking(false);
-            setHasFinishedSpeaking(true);
-            setTranscript(finalTranscriptRef.current.trim());
-            isProcessingRef.current = true;
-          } else if (speechDuration < MIN_SPEECH_DURATION) {
-            console.log('⚠️ Speech too short, ignoring');
-            setIsSpeaking(false);
-            finalTranscriptRef.current = '';
-          }
-          
-          silenceTimeoutRef.current = null;
-        }, SILENCE_DURATION);
-      }
+    } else if (isSpeaking && !silenceTimeoutRef.current) {
+      // Start silence countdown
+      silenceTimeoutRef.current = setTimeout(() => {
+        const speechDuration = lastSpeechTimeRef.current - speechStartTimeRef.current;
+        
+        if (speechDuration >= MIN_SPEECH_DURATION && finalTranscriptRef.current.trim() && !isProcessingRef.current) {
+          console.log('✅ Speech finished - duration:', speechDuration, 'ms');
+          console.log('📝 Final transcript:', finalTranscriptRef.current);
+          setIsSpeaking(false);
+          setHasFinishedSpeaking(true);
+          setTranscript(finalTranscriptRef.current.trim());
+          isProcessingRef.current = true;
+        } else {
+          console.log('⚠️ Speech too short or no transcript, ignoring');
+          setIsSpeaking(false);
+          finalTranscriptRef.current = '';
+        }
+        
+        silenceTimeoutRef.current = null;
+      }, SILENCE_DURATION);
     }
 
     if (isRecording) {
-      animationFrameRef.current = requestAnimationFrame(detectVoiceActivity);
+      animationFrameRef.current = requestAnimationFrame(monitorAudioLevel);
     }
   }, [isRecording, isSpeaking]);
-
-  // Analyze if the audio contains human voice
-  const analyzeVoiceActivity = (frequencyData: Uint8Array, overallLevel: number): boolean => {
-    if (overallLevel < VOICE_ENERGY_THRESHOLD) {
-      return false; // Too quiet to be speech
-    }
-
-    const sampleRate = audioContextRef.current?.sampleRate || 44100;
-    const nyquist = sampleRate / 2;
-    const binSize = nyquist / frequencyData.length;
-    
-    let voiceEnergySum = 0;
-    let totalEnergySum = 0;
-    let voiceBinCount = 0;
-    
-    // Analyze frequency spectrum
-    for (let i = 0; i < frequencyData.length; i++) {
-      const frequency = i * binSize;
-      const magnitude = frequencyData[i] / 255;
-      
-      totalEnergySum += magnitude;
-      
-      // Check if frequency is in human voice range
-      if (frequency >= VOICE_FREQUENCY_MIN && frequency <= VOICE_FREQUENCY_MAX) {
-        voiceEnergySum += magnitude;
-        voiceBinCount++;
-      }
-    }
-    
-    if (voiceBinCount === 0 || totalEnergySum === 0) {
-      return false;
-    }
-    
-    // Calculate voice confidence
-    const voiceRatio = voiceEnergySum / totalEnergySum;
-    const voiceConfidence = Math.min(voiceRatio * 2, 1); // Boost voice ratio
-    
-    // Additional checks for voice characteristics
-    const hasVoiceFormants = checkForFormants(frequencyData, binSize);
-    const hasVoicePitch = checkForPitch(frequencyData, binSize);
-    
-    // Combine all factors
-    let finalConfidence = voiceConfidence;
-    if (hasVoiceFormants) finalConfidence += 0.2;
-    if (hasVoicePitch) finalConfidence += 0.2;
-    
-    // Add to rolling buffer for stability
-    voiceActivityBufferRef.current.push(finalConfidence);
-    if (voiceActivityBufferRef.current.length > 5) {
-      voiceActivityBufferRef.current.shift();
-    }
-    
-    // Use average of recent detections for stability
-    const avgConfidence = voiceActivityBufferRef.current.reduce((sum, val) => sum + val, 0) / voiceActivityBufferRef.current.length;
-    
-    const isVoice = avgConfidence >= VOICE_CONFIDENCE_THRESHOLD;
-    
-    if (isVoice) {
-      console.log(`🎯 Voice detected - Confidence: ${(avgConfidence * 100).toFixed(1)}%`);
-    }
-    
-    return isVoice;
-  };
-
-  // Check for voice formants (resonant frequencies in human speech)
-  const checkForFormants = (frequencyData: Uint8Array, binSize: number): boolean => {
-    const formantRanges = [
-      [200, 1000],   // F1 range
-      [800, 2500],   // F2 range
-      [1500, 3500]   // F3 range
-    ];
-    
-    let formantCount = 0;
-    
-    for (const [minFreq, maxFreq] of formantRanges) {
-      const minBin = Math.floor(minFreq / binSize);
-      const maxBin = Math.floor(maxFreq / binSize);
-      
-      let peakMagnitude = 0;
-      for (let i = minBin; i < maxBin && i < frequencyData.length; i++) {
-        peakMagnitude = Math.max(peakMagnitude, frequencyData[i]);
-      }
-      
-      if (peakMagnitude > 30) { // Threshold for formant presence
-        formantCount++;
-      }
-    }
-    
-    return formantCount >= 2; // At least 2 formants for voice
-  };
-
-  // Check for pitch (fundamental frequency) typical of human voice
-  const checkForPitch = (frequencyData: Uint8Array, binSize: number): boolean => {
-    const pitchRange = [80, 400]; // Typical human pitch range
-    const minBin = Math.floor(pitchRange[0] / binSize);
-    const maxBin = Math.floor(pitchRange[1] / binSize);
-    
-    let maxMagnitude = 0;
-    for (let i = minBin; i < maxBin && i < frequencyData.length; i++) {
-      maxMagnitude = Math.max(maxMagnitude, frequencyData[i]);
-    }
-    
-    return maxMagnitude > 25; // Threshold for pitch presence
-  };
 
   const resetForNextSpeech = useCallback(() => {
     console.log('🔄 Resetting for next speech');
     finalTranscriptRef.current = '';
     speechStartTimeRef.current = 0;
-    lastVoiceActivityRef.current = 0;
+    lastSpeechTimeRef.current = 0;
     isProcessingRef.current = false;
-    voiceActivityBufferRef.current = [];
     setHasFinishedSpeaking(false);
     setTranscript('');
     setIsSpeaking(false);
@@ -235,41 +126,44 @@ export function useAudioRecording(): UseAudioRecordingReturn {
       setError(null);
       resetForNextSpeech();
       
+      console.log('🎙️ Requesting microphone access...');
+      
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('Audio recording not supported in this browser');
+        throw new Error('Microphone access not supported in this browser');
       }
       
+      // Request microphone with optimal settings
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
-          noiseSuppression: false, // Disable to preserve voice characteristics
+          noiseSuppression: true,
           autoGainControl: true,
           sampleRate: 44100,
         } 
       });
 
       streamRef.current = stream;
+      console.log('✅ Microphone access granted');
 
-      // Set up audio analysis for voice detection
+      // Set up audio analysis
       try {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
         analyserRef.current = audioContextRef.current.createAnalyser();
         const source = audioContextRef.current.createMediaStreamSource(stream);
         source.connect(analyserRef.current);
         
-        // Optimized for voice detection
-        analyserRef.current.fftSize = 2048; // Higher resolution for better frequency analysis
-        analyserRef.current.smoothingTimeConstant = 0.3; // Moderate smoothing
-        analyserRef.current.minDecibels = -90;
-        analyserRef.current.maxDecibels = -10;
-
-        detectVoiceActivity();
+        // Optimized settings for voice detection
+        analyserRef.current.fftSize = 1024;
+        analyserRef.current.smoothingTimeConstant = 0.8;
+        
+        console.log('🔊 Audio analysis setup complete');
+        monitorAudioLevel();
       } catch (audioContextError) {
         console.warn('Audio analysis failed:', audioContextError);
-        setError('Voice detection not available - using basic audio detection');
+        setError('Audio monitoring not available');
       }
 
-      // Set up speech recognition with better settings
+      // Set up speech recognition
       if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
         const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
         recognitionRef.current = new SpeechRecognition();
@@ -292,10 +186,12 @@ export function useAudioRecording(): UseAudioRecordingReturn {
             const transcript = event.results[i][0].transcript;
             const confidence = event.results[i][0].confidence;
             
-            // Only accept high-confidence results
-            if (event.results[i].isFinal && confidence > 0.7) {
-              finalTranscript += transcript;
-            } else if (!event.results[i].isFinal) {
+            if (event.results[i].isFinal) {
+              if (confidence > 0.5) { // Lower confidence threshold
+                finalTranscript += transcript;
+                console.log('📝 Final transcript added:', transcript, 'confidence:', confidence);
+              }
+            } else {
               interimTranscript += transcript;
             }
           }
@@ -303,28 +199,31 @@ export function useAudioRecording(): UseAudioRecordingReturn {
           // Update final transcript accumulator
           if (finalTranscript) {
             finalTranscriptRef.current += finalTranscript + ' ';
-            console.log('📝 High-confidence transcript:', finalTranscriptRef.current);
           }
           
-          // Show live transcript only if we're actively speaking
-          if (!isProcessingRef.current && isSpeaking) {
+          // Show live transcript
+          if (!isProcessingRef.current) {
             const displayTranscript = (finalTranscriptRef.current + interimTranscript).trim();
-            setTranscript(displayTranscript);
+            if (displayTranscript) {
+              setTranscript(displayTranscript);
+            }
           }
         };
         
         recognitionRef.current.onerror = (event: any) => {
           console.error('Speech recognition error:', event.error);
           if (event.error === 'network') {
-            setError('Network error - speech recognition unavailable');
+            setError('Network error - check internet connection');
+          } else if (event.error === 'not-allowed') {
+            setError('Microphone permission denied');
           } else if (event.error !== 'no-speech' && event.error !== 'aborted') {
-            setError(`Speech recognition error: ${event.error}`);
+            console.warn('Speech recognition error:', event.error);
           }
         };
         
         recognitionRef.current.onend = () => {
-          setIsListening(false);
           console.log('🔚 Speech recognition ended');
+          setIsListening(false);
           
           // Auto-restart if still recording and not processing
           if (isRecording && !isProcessingRef.current) {
@@ -332,6 +231,7 @@ export function useAudioRecording(): UseAudioRecordingReturn {
               if (recognitionRef.current && isRecording && !isProcessingRef.current) {
                 try {
                   recognitionRef.current.start();
+                  console.log('🔄 Restarting speech recognition');
                 } catch (e) {
                   console.warn('Failed to restart recognition:', e);
                 }
@@ -341,6 +241,7 @@ export function useAudioRecording(): UseAudioRecordingReturn {
         };
         
         recognitionRef.current.start();
+        console.log('🎧 Starting speech recognition');
       } else {
         setError('Speech recognition not supported in this browser');
       }
@@ -370,14 +271,14 @@ export function useAudioRecording(): UseAudioRecordingReturn {
       }
 
       setIsRecording(true);
-      console.log('🎙️ Voice-only recording started');
+      console.log('🎙️ Recording started successfully');
       
     } catch (err) {
-      console.error('Error starting recording:', err);
+      console.error('❌ Error starting recording:', err);
       setError(err instanceof Error ? err.message : 'Failed to access microphone');
       setIsRecording(false);
     }
-  }, [isRecording, detectVoiceActivity, resetForNextSpeech, isSpeaking]);
+  }, [isRecording, monitorAudioLevel, resetForNextSpeech]);
 
   const stopRecording = useCallback(async (): Promise<Blob | null> => {
     return new Promise((resolve) => {
@@ -385,9 +286,9 @@ export function useAudioRecording(): UseAudioRecordingReturn {
       
       // If we have transcript when stopping, process it immediately
       if (finalTranscriptRef.current.trim() && !isProcessingRef.current) {
-        const speechDuration = lastVoiceActivityRef.current - speechStartTimeRef.current;
+        const speechDuration = lastSpeechTimeRef.current - speechStartTimeRef.current;
         if (speechDuration >= MIN_SPEECH_DURATION) {
-          console.log('🔄 Processing transcript on stop:', finalTranscriptRef.current);
+          console.log('🔄 Processing transcript on manual stop:', finalTranscriptRef.current);
           setHasFinishedSpeaking(true);
           setTranscript(finalTranscriptRef.current.trim());
           isProcessingRef.current = true;
