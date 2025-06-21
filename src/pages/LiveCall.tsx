@@ -168,18 +168,12 @@ export default function LiveCall() {
     console.log(`🎤 Toggling mic: ${isMicOn} -> ${!isMicOn}`);
     
     if (isMicOn && isRecording) {
-      // Force stop recording when muting
+      // Force stop recording when muting - this will trigger processing if there's speech
       await stopRecording();
       console.log('🔇 Mic muted, recording stopped');
     }
     
     setIsMicOn(!isMicOn);
-    
-    // If we have a transcript when muting, process it immediately
-    if (isMicOn && transcript && transcript.trim().length > 0 && !isProcessingResponse) {
-      console.log('🔄 Processing transcript on mic mute:', transcript);
-      processUserMessage(transcript.trim());
-    }
   };
 
   const sendMessage = async () => {
@@ -191,6 +185,28 @@ export default function LiveCall() {
 
   const currentSpeaker = conversation.length > 0 ? conversation[conversation.length - 1]?.speaker : 'athena';
   const currentSpeakerMessage = conversation.length > 0 ? conversation[conversation.length - 1]?.message : '';
+
+  // Status message for user feedback
+  const getStatusMessage = () => {
+    if (isProcessingResponse) {
+      return { text: '🤖 Athena is thinking...', color: 'text-purple-600' };
+    }
+    if (hasFinishedSpeaking && transcript) {
+      return { text: '⏳ Processing your speech...', color: 'text-yellow-600' };
+    }
+    if (isUserSpeaking) {
+      return { text: '🎤 Speaking detected', color: 'text-green-600' };
+    }
+    if (isListening && isMicOn) {
+      return { text: '🎧 Listening for speech...', color: 'text-blue-600' };
+    }
+    if (isMicOn) {
+      return { text: 'Ready to listen - start speaking', color: 'text-gray-600' };
+    }
+    return { text: 'Microphone muted - click to unmute or type your question', color: 'text-gray-600' };
+  };
+
+  const statusMessage = getStatusMessage();
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -498,20 +514,10 @@ export default function LiveCall() {
                   Send
                 </button>
               </div>
-              <div className="mt-2 text-xs text-gray-500 text-center">
-                {isProcessingResponse ? (
-                  <span className="text-purple-600 font-medium">🤖 Athena is thinking...</span>
-                ) : hasFinishedSpeaking ? (
-                  <span className="text-yellow-600 font-medium">⏳ Processing your speech...</span>
-                ) : isUserSpeaking ? (
-                  <span className="text-green-600 font-medium">🎤 Speaking detected</span>
-                ) : isListening && isMicOn ? (
-                  <span className="text-blue-600 font-medium">🎧 Listening for speech...</span>
-                ) : isMicOn ? (
-                  'Ready to listen - start speaking'
-                ) : (
-                  'Microphone muted - click to unmute or type your question'
-                )}
+              <div className="mt-2 text-xs text-center">
+                <span className={`font-medium ${statusMessage.color}`}>
+                  {statusMessage.text}
+                </span>
               </div>
             </div>
           )}
