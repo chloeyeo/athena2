@@ -9,11 +9,13 @@ interface UseAudioRecordingReturn {
   isListening: boolean;
   transcript: string;
   clearTranscript: () => void;
+  isSpeaking: boolean;
 }
 
 export function useAudioRecording(): UseAudioRecordingReturn {
   const [isRecording, setIsRecording] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [transcript, setTranscript] = useState('');
@@ -25,13 +27,78 @@ export function useAudioRecording(): UseAudioRecordingReturn {
   const animationFrameRef = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const speechTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSpeechTimeRef = useRef<number>(0);
+
+  const SILENCE_THRESHOLD = 0.01; // Audio level threshold for silence
+  const SILENCE_DURATION = 2000; // 2 seconds of silence before stopping
+  const MIN_SPEECH_DURATION = 500; // Minimum speech duration before processing
+
+  const detectSilence = useCallback(() => {
+    if (!analyserRef.current || !isRecording) return;
+
+    const bufferLength = analyserRef.current.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    analyserRef.current.getByteFrequencyData(dataArray);
+    
+    const average = dataArray.reduce((sum, value) => sum + value, 0) / bufferLength;
+    const normalizedLevel = average / 255;
+    
+    setAudioLevel(normalizedLevel);
+
+    const currentTime = Date.now();
+    
+    if (normalizedLevel > SILENCE_THRESHOLD) {
+      // User is speaking
+      setIsSpeaking(true);
+      lastSpeechTimeRef.current = currentTime;
+      
+      // Clear any existing silence timeout
+      if (silenceTimeoutRef.current) {
+        clearTimeout(silenceTimeoutRef.current);
+        silenceTimeoutRef.current = null;
+      }
+    } else {
+      // Silence detected
+      setIsSpeaking(false);
+      
+      // Only start silence timeout if we've had some speech
+      if (lastSpeechTimeRef.current > 0 && currentTime - lastSpeechTimeRef.current > MIN_SPEECH_DURATION) {
+        if (!silenceTimeoutRef.current) {
+          silenceTimeoutRef.current = setTimeout(() => {
+            // User has stopped speaking for SILENCE_DURATION
+            if (transcript.trim()) {
+              // Process the transcript
+              console.log('Speech ended, processing transcript:', transcript);
+              setIsListening(false);
+              
+              // Reset for next speech
+              setTimeout(() => {
+                if (isRecording) {
+                  setIsListening(true);
+                  lastSpeechTimeRef.current = 0;
+                }
+              }, 1000);
+            }
+            silenceTimeoutRef.current = null;
+          }, SILENCE_DURATION);
+        }
+      }
+    }
+
+    if (isRecording) {
+      animationFrameRef.current = requestAnimationFrame(detectSilence);
+    }
+  }, [isRecording, transcript]);
 
   const startRecording = useCallback(async () => {
     try {
       setError(null);
       setTranscript('');
+      setIsSpeaking(false);
+      lastSpeechTimeRef.current = 0;
       
-      // Check if getUserMedia is supported
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Audio recording not supported in this browser');
       }
@@ -47,7 +114,7 @@ export function useAudioRecording(): UseAudioRecordingReturn {
 
       streamRef.current = stream;
 
-      // Set up audio level monitoring
+      // Set up audio level monitoring and silence detection
       try {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
         analyserRef.current = audioContextRef.current.createAnalyser();
@@ -55,19 +122,10 @@ export function useAudioRecording(): UseAudioRecordingReturn {
         source.connect(analyserRef.current);
         
         analyserRef.current.fftSize = 256;
-        const bufferLength = analyserRef.current.frequencyBinCount;
-        const dataArray = new Uint8Array(bufferLength);
+        analyserRef.current.smoothingTimeConstant = 0.8;
 
-        const updateAudioLevel = () => {
-          if (analyserRef.current && isRecording) {
-            analyserRef.current.getByteFrequencyData(dataArray);
-            const average = dataArray.reduce((sum, value) => sum + value, 0) / bufferLength;
-            setAudioLevel(average / 255);
-            animationFrameRef.current = requestAnimationFrame(updateAudioLevel);
-          }
-        };
-
-        updateAudioLevel();
+        // Start silence detection
+        detectSilence();
       } catch (audioContextError) {
         console.warn('Audio level monitoring failed:', audioContextError);
       }
@@ -80,6 +138,7 @@ export function useAudioRecording(): UseAudioRecordingReturn {
         recognitionRef.current.continuous = true;
         recognitionRef.current.interimResults = true;
         recognitionRef.current.lang = 'en-US';
+        recognitionRef.current.maxAlternatives = 1;
         
         recognitionRef.current.onstart = () => {
           setIsListening(true);
@@ -99,19 +158,33 @@ export function useAudioRecording(): UseAudioRecordingReturn {
             }
           }
           
-          setTranscript(finalTranscript + interimTranscript);
+          // Update transcript with both final and interim results
+          const fullTranscript = finalTranscript + interimTranscript;
+          setTranscript(fullTranscript);
+          
+          // If we have final results, mark as having speech
+          if (finalTranscript) {
+            lastSpeechTimeRef.current = Date.now();
+          }
         };
         
         recognitionRef.current.onerror = (event: any) => {
           console.error('Speech recognition error:', event.error);
-          if (event.error !== 'no-speech') {
+          if (event.error !== 'no-speech' && event.error !== 'aborted') {
             setError(`Speech recognition error: ${event.error}`);
           }
         };
         
         recognitionRef.current.onend = () => {
-          setIsListening(false);
           console.log('Speech recognition ended');
+          // Restart recognition if still recording
+          if (isRecording && recognitionRef.current) {
+            try {
+              recognitionRef.current.start();
+            } catch (e) {
+              console.warn('Failed to restart speech recognition:', e);
+            }
+          }
         };
         
         recognitionRef.current.start();
@@ -152,17 +225,27 @@ export function useAudioRecording(): UseAudioRecordingReturn {
       }
 
       setIsRecording(true);
-      console.log('Recording started');
+      console.log('Recording started with silence detection');
       
     } catch (err) {
       console.error('Error starting recording:', err);
       setError(err instanceof Error ? err.message : 'Failed to access microphone');
       setIsRecording(false);
     }
-  }, [isRecording]);
+  }, [isRecording, detectSilence]);
 
   const stopRecording = useCallback(async (): Promise<Blob | null> => {
     return new Promise((resolve) => {
+      // Clear timeouts
+      if (silenceTimeoutRef.current) {
+        clearTimeout(silenceTimeoutRef.current);
+        silenceTimeoutRef.current = null;
+      }
+      if (speechTimeoutRef.current) {
+        clearTimeout(speechTimeoutRef.current);
+        speechTimeoutRef.current = null;
+      }
+
       // Stop speech recognition
       if (recognitionRef.current) {
         recognitionRef.current.stop();
@@ -191,7 +274,9 @@ export function useAudioRecording(): UseAudioRecordingReturn {
         
         setIsRecording(false);
         setIsListening(false);
+        setIsSpeaking(false);
         setAudioLevel(0);
+        lastSpeechTimeRef.current = 0;
         console.log('Recording stopped, blob size:', audioBlob.size);
         resolve(audioBlob);
       };
@@ -202,6 +287,7 @@ export function useAudioRecording(): UseAudioRecordingReturn {
 
   const clearTranscript = useCallback(() => {
     setTranscript('');
+    lastSpeechTimeRef.current = 0;
   }, []);
 
   return {
@@ -212,6 +298,7 @@ export function useAudioRecording(): UseAudioRecordingReturn {
     error,
     isListening,
     transcript,
-    clearTranscript
+    clearTranscript,
+    isSpeaking
   };
 }

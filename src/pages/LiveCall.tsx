@@ -8,13 +8,23 @@ import {
   Settings,
   MessageSquare,
   Volume2,
-  VolumeX
+  VolumeX,
+  AlertCircle
 } from 'lucide-react';
 import { useAccessibility } from '../contexts/AccessibilityContext';
 import { useAudioRecording } from '../hooks/useAudioRecording';
 import { useTextToSpeech } from '../hooks/useTextToSpeech';
+import { AIService } from '../services/aiService';
 import AthenaAvatar from '../components/AthenaAvatar';
 import LiveTranscript from '../components/LiveTranscript';
+
+interface ConversationMessage {
+  id: string;
+  speaker: 'user' | 'athena';
+  message: string;
+  timestamp: Date;
+  sources?: Array<{ title: string; url: string }>;
+}
 
 export default function LiveCall() {
   const [isCallActive, setIsCallActive] = useState(false);
@@ -22,12 +32,8 @@ export default function LiveCall() {
   const [isMicOn, setIsMicOn] = useState(true);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   const [currentMessage, setCurrentMessage] = useState('');
-  const [conversation, setConversation] = useState<Array<{
-    speaker: 'user' | 'athena';
-    message: string;
-    timestamp: Date;
-    sources?: Array<{ title: string; url: string }>;
-  }>>([]);
+  const [conversation, setConversation] = useState<ConversationMessage[]>([]);
+  const [isProcessingResponse, setIsProcessingResponse] = useState(false);
   
   const { settings, announceToScreenReader } = useAccessibility();
   const { 
@@ -38,9 +44,10 @@ export default function LiveCall() {
     error: recordingError,
     isListening,
     transcript,
-    clearTranscript
+    clearTranscript,
+    isSpeaking: isUserSpeaking
   } = useAudioRecording();
-  const { speak, stop: stopSpeaking, isSpeaking, error: speechError } = useTextToSpeech();
+  const { speak, stop: stopSpeaking, isSpeaking: isAthenaSpeaking, error: speechError } = useTextToSpeech();
 
   // Auto-start recording when mic is on and call is active
   useEffect(() => {
@@ -51,81 +58,69 @@ export default function LiveCall() {
     }
   }, [isCallActive, isMicOn, isRecording, startRecording, stopRecording]);
 
-  // Process transcript when user stops speaking
+  // Process transcript when user stops speaking (handled by improved useAudioRecording)
   useEffect(() => {
-    if (transcript && !isListening && transcript.trim().length > 0) {
-      // Add user message to conversation
-      const userMessage = {
-        speaker: 'user' as const,
-        message: transcript.trim(),
+    if (transcript && !isListening && transcript.trim().length > 0 && !isProcessingResponse) {
+      processUserMessage(transcript.trim());
+    }
+  }, [transcript, isListening, isProcessingResponse]);
+
+  const processUserMessage = async (message: string) => {
+    if (isProcessingResponse) return;
+    
+    setIsProcessingResponse(true);
+    
+    // Add user message to conversation
+    const userMessage: ConversationMessage = {
+      id: `user-${Date.now()}`,
+      speaker: 'user',
+      message,
+      timestamp: new Date()
+    };
+
+    setConversation(prev => [...prev, userMessage]);
+    
+    try {
+      // Get Athena's response
+      const athenaResponse = await AIService.processMessage(message, conversation);
+      
+      setConversation(prev => [...prev, athenaResponse]);
+      
+      if (settings.screenReader) {
+        announceToScreenReader(`Athena says: ${athenaResponse.message}`);
+      }
+      
+      // Speak Athena's response if speaker is on
+      if (isSpeakerOn) {
+        speak(athenaResponse.message);
+      }
+    } catch (error) {
+      console.error('Error processing message:', error);
+      
+      const errorMessage: ConversationMessage = {
+        id: `athena-error-${Date.now()}`,
+        speaker: 'athena',
+        message: "I apologize, but I'm having trouble processing your request right now. Could you please try rephrasing your question?",
         timestamp: new Date()
       };
-
-      setConversation(prev => [...prev, userMessage]);
       
-      // Generate Athena's response
-      setTimeout(() => {
-        const responses = [
-          {
-            message: "Based on the Solicitors Regulation Authority handbook, to qualify as a solicitor in England and Wales, you'll need to complete the Solicitors Qualifying Examination (SQE). This consists of SQE1, which tests functioning legal knowledge, and SQE2, which assesses practical legal skills. You'll also need qualifying work experience and meet character and suitability requirements.",
-            sources: [
-              { title: "SRA Handbook - SQE Requirements", url: "https://sra.org.uk/sqa" },
-              { title: "Solicitors Qualifying Examination Guide", url: "https://sra.org.uk/sqa-guide" }
-            ]
-          },
-          {
-            message: "For contract disputes, the first step is to review the contract terms carefully. Under English contract law, you should identify any breaches and consider remedies available. I recommend documenting all communications and attempting negotiation before litigation. The Contract Rights of Third Parties Act 1999 may also be relevant depending on the circumstances.",
-            sources: [
-              { title: "Contract Rights of Third Parties Act 1999", url: "https://legislation.gov.uk" },
-              { title: "Contract Law Principles", url: "https://gov.uk/contract-law" }
-            ]
-          },
-          {
-            message: "I understand you're asking about legal requirements. Could you please be more specific about which area of law you're interested in? I can provide detailed guidance on employment law, contract law, property law, or other legal areas with proper source citations.",
-            sources: []
-          }
-        ];
-
-        const response = responses[Math.floor(Math.random() * responses.length)];
-        const athenaMessage = {
-          speaker: 'athena' as const,
-          message: response.message,
-          timestamp: new Date(),
-          sources: response.sources
-        };
-
-        setConversation(prev => [...prev, athenaMessage]);
-        
-        if (settings.screenReader) {
-          announceToScreenReader(`Athena says: ${response.message}`);
-        }
-        
-        // Speak Athena's response if speaker is on
-        if (isSpeakerOn) {
-          speak(response.message);
-        }
-      }, 1500);
-
-      // Clear transcript after processing
+      setConversation(prev => [...prev, errorMessage]);
+    } finally {
+      setIsProcessingResponse(false);
       clearTranscript();
     }
-  }, [transcript, isListening, clearTranscript, settings.screenReader, announceToScreenReader, isSpeakerOn, speak]);
+  };
 
-  const startCall = () => {
+  const startCall = async () => {
     setIsCallActive(true);
     announceToScreenReader('Call with Athena started');
     
-    // Simulate Athena greeting
-    setTimeout(() => {
-      const greeting = "Hello! I'm Athena, your AI legal mentor. I'm here to provide accurate, source-backed legal guidance. How can I help you today?";
-      const athenaMessage = {
-        speaker: 'athena' as const,
-        message: greeting,
-        timestamp: new Date()
-      };
+    // Start conversation
+    try {
+      const initialConversation = await AIService.startConversation();
+      setConversation(initialConversation);
       
-      setConversation([athenaMessage]);
-      
+      const greeting = initialConversation[0].message;
       if (settings.screenReader) {
         announceToScreenReader(greeting);
       }
@@ -134,7 +129,9 @@ export default function LiveCall() {
       if (isSpeakerOn) {
         speak(greeting);
       }
-    }, 1000);
+    } catch (error) {
+      console.error('Error starting conversation:', error);
+    }
   };
 
   const endCall = async () => {
@@ -145,6 +142,7 @@ export default function LiveCall() {
     setIsCallActive(false);
     setConversation([]);
     clearTranscript();
+    setIsProcessingResponse(false);
     announceToScreenReader('Call with Athena ended');
   };
 
@@ -155,32 +153,10 @@ export default function LiveCall() {
     setIsMicOn(!isMicOn);
   };
 
-  const sendMessage = () => {
-    if (!currentMessage.trim()) return;
-
-    const userMessage = {
-      speaker: 'user' as const,
-      message: currentMessage,
-      timestamp: new Date()
-    };
-
-    setConversation(prev => [...prev, userMessage]);
+  const sendMessage = async () => {
+    if (!currentMessage.trim() || isProcessingResponse) return;
     
-    // Simulate Athena's response
-    setTimeout(() => {
-      const athenaMessage = {
-        speaker: 'athena' as const,
-        message: "I received your message. Let me provide you with accurate legal guidance based on verified sources.",
-        timestamp: new Date()
-      };
-
-      setConversation(prev => [...prev, athenaMessage]);
-      
-      if (isSpeakerOn) {
-        speak(athenaMessage.message);
-      }
-    }, 1000);
-    
+    await processUserMessage(currentMessage.trim());
     setCurrentMessage('');
   };
 
@@ -197,7 +173,7 @@ export default function LiveCall() {
               Live Call with Athena
             </h1>
             <p className="text-gray-600 mt-1 text-sm sm:text-base">
-              Your AI legal mentor with universal accessibility
+              Your AI legal mentor for professional development
             </p>
           </div>
           
@@ -212,9 +188,10 @@ export default function LiveCall() {
                   {new Date().toLocaleTimeString()}
                 </span>
                 {(recordingError || speechError) && (
-                  <span className="text-red-600 text-xs sm:text-sm">
-                    {recordingError || speechError}
-                  </span>
+                  <div className="flex items-center space-x-1 text-red-600 text-xs sm:text-sm">
+                    <AlertCircle className="w-4 h-4" />
+                    <span>{recordingError || speechError}</span>
+                  </div>
                 )}
               </>
             )}
@@ -230,7 +207,7 @@ export default function LiveCall() {
             <div className="h-full flex items-center justify-center relative">
               <AthenaAvatar 
                 isActive={isCallActive}
-                isSpeaking={isSpeaking && currentSpeaker === 'athena'}
+                isSpeaking={isAthenaSpeaking && currentSpeaker === 'athena'}
                 currentMessage={currentSpeakerMessage}
               />
               
@@ -260,9 +237,12 @@ export default function LiveCall() {
                         />
                       </div>
                     )}
-                    {/* Listening indicator */}
+                    {/* Speaking indicators */}
+                    {isUserSpeaking && (
+                      <div className="absolute top-1 left-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                    )}
                     {isListening && (
-                      <div className="absolute top-1 left-1 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                      <div className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
                     )}
                   </div>
                 ) : (
@@ -271,6 +251,16 @@ export default function LiveCall() {
                   </div>
                 )}
               </div>
+
+              {/* Processing indicator */}
+              {isProcessingResponse && (
+                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black/80 text-white px-4 py-2 rounded-lg">
+                  <div className="flex items-center space-x-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <span className="text-sm">Athena is thinking...</span>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="h-full flex items-center justify-center bg-gradient-to-br from-primary-900 to-primary-800 p-4">
@@ -280,7 +270,7 @@ export default function LiveCall() {
                 </div>
                 <h2 className="text-lg sm:text-xl font-semibold mb-2">Ready to meet Athena?</h2>
                 <p className="text-primary-200 mb-6 text-sm sm:text-base">
-                  Start your live video call with your AI legal mentor
+                  Start your live call for legal mentoring and professional development
                 </p>
                 <button
                   onClick={startCall}
@@ -344,7 +334,7 @@ export default function LiveCall() {
                 >
                   {isSpeakerOn ? <Volume2 className="w-4 h-4 sm:w-5 sm:h-5" /> : <VolumeX className="w-4 h-4 sm:w-5 sm:h-5" />}
                   {/* Speaking indicator */}
-                  {isSpeaking && (
+                  {isAthenaSpeaking && (
                     <div className="absolute -top-1 -right-1 w-2 h-2 sm:w-3 sm:h-3 bg-blue-500 rounded-full animate-pulse" />
                   )}
                 </button>
@@ -422,6 +412,18 @@ export default function LiveCall() {
                 </div>
               </div>
             )}
+
+            {/* Processing indicator */}
+            {isProcessingResponse && (
+              <div className="text-left">
+                <div className="inline-block p-2 sm:p-3 rounded-lg bg-gray-100 text-gray-900">
+                  <div className="flex items-center space-x-2">
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600"></div>
+                    <span className="text-xs sm:text-sm">Athena is thinking...</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           
           {isCallActive && (
@@ -435,10 +437,11 @@ export default function LiveCall() {
                   placeholder="Type your question..."
                   className="flex-1 px-2 sm:px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
                   aria-label="Type your question"
+                  disabled={isProcessingResponse}
                 />
                 <button
                   onClick={sendMessage}
-                  disabled={!currentMessage.trim()}
+                  disabled={!currentMessage.trim() || isProcessingResponse}
                   className="px-3 sm:px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 text-sm"
                   aria-label="Send message"
                 >
@@ -446,8 +449,10 @@ export default function LiveCall() {
                 </button>
               </div>
               <div className="mt-2 text-xs text-gray-500 text-center">
-                {isListening ? (
-                  <span className="text-green-600 font-medium">🎤 Listening... Speak now</span>
+                {isUserSpeaking ? (
+                  <span className="text-green-600 font-medium">🎤 Speaking detected</span>
+                ) : isListening ? (
+                  <span className="text-blue-600 font-medium">🎧 Listening for speech...</span>
                 ) : isRecording ? (
                   'Ready to listen - start speaking'
                 ) : (

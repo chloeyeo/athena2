@@ -1,17 +1,14 @@
 import React, { createContext, useContext, ReactNode } from 'react';
-import { useAuth } from '../hooks/useAuth';
-import { User } from 'firebase/auth';
-import { UserProfile } from '../services/authService';
 
 interface AuthContextType {
-  user: User | null;
-  userProfile: UserProfile | null;
+  user: { displayName: string } | null;
+  userProfile: any | null;
   loading: boolean;
   error: string | null;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, displayName: string) => Promise<void>;
   signOut: () => Promise<void>;
-  updatePreferences: (preferences: Partial<UserProfile['preferences']>) => Promise<void>;
+  updatePreferences: (preferences: any) => Promise<void>;
   isAuthenticated: boolean;
 }
 
@@ -22,10 +19,21 @@ interface AuthProviderProps {
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
-  const auth = useAuth();
+  // Mock authentication - no login required
+  const mockAuth: AuthContextType = {
+    user: { displayName: 'User' },
+    userProfile: null,
+    loading: false,
+    error: null,
+    signIn: async () => {},
+    signUp: async () => {},
+    signOut: async () => {},
+    updatePreferences: async () => {},
+    isAuthenticated: true // Always authenticated
+  };
 
   return (
-    <AuthContext.Provider value={auth}>
+    <AuthContext.Provider value={mockAuth}>
       {children}
     </AuthContext.Provider>
   );
