@@ -53,8 +53,10 @@ export default function LiveCall() {
   // Auto-start recording when mic is on and call is active
   useEffect(() => {
     if (isCallActive && isMicOn && !isRecording) {
+      console.log('🎙️ Auto-starting recording');
       startRecording();
     } else if (!isMicOn && isRecording) {
+      console.log('🔇 Mic off, stopping recording');
       stopRecording();
     }
   }, [isCallActive, isMicOn, isRecording, startRecording, stopRecording]);
@@ -62,18 +64,18 @@ export default function LiveCall() {
   // Process transcript ONLY when user has finished speaking
   useEffect(() => {
     if (hasFinishedSpeaking && transcript && transcript.trim().length > 0 && !isProcessingResponse) {
-      console.log('Processing finished speech:', transcript);
+      console.log('🔄 Processing finished speech:', transcript);
       processUserMessage(transcript.trim());
     }
   }, [hasFinishedSpeaking, transcript, isProcessingResponse]);
 
   const processUserMessage = async (message: string) => {
     if (isProcessingResponse) {
-      console.log('Already processing, ignoring:', message);
+      console.log('⏳ Already processing, ignoring:', message);
       return;
     }
     
-    console.log('Starting to process message:', message);
+    console.log('🚀 Starting to process message:', message);
     setIsProcessingResponse(true);
     
     // Add user message to conversation
@@ -101,7 +103,7 @@ export default function LiveCall() {
         speak(athenaResponse.message);
       }
     } catch (error) {
-      console.error('Error processing message:', error);
+      console.error('❌ Error processing message:', error);
       
       const errorMessage: ConversationMessage = {
         id: `athena-error-${Date.now()}`,
@@ -111,9 +113,18 @@ export default function LiveCall() {
       };
       
       setConversation(prev => [...prev, errorMessage]);
+      
+      if (isSpeakerOn) {
+        speak(errorMessage.message);
+      }
     } finally {
       setIsProcessingResponse(false);
       clearTranscript();
+      
+      // Small delay before ready for next speech
+      setTimeout(() => {
+        console.log('✅ Ready for next speech');
+      }, 1000);
     }
   };
 
@@ -141,6 +152,7 @@ export default function LiveCall() {
   };
 
   const endCall = async () => {
+    console.log('📞 Ending call');
     if (isRecording) {
       await stopRecording();
     }
@@ -153,10 +165,21 @@ export default function LiveCall() {
   };
 
   const toggleMic = async () => {
+    console.log(`🎤 Toggling mic: ${isMicOn} -> ${!isMicOn}`);
+    
     if (isMicOn && isRecording) {
+      // Force stop recording when muting
       await stopRecording();
+      console.log('🔇 Mic muted, recording stopped');
     }
+    
     setIsMicOn(!isMicOn);
+    
+    // If we have a transcript when muting, process it immediately
+    if (isMicOn && transcript && transcript.trim().length > 0 && !isProcessingResponse) {
+      console.log('🔄 Processing transcript on mic mute:', transcript);
+      processUserMessage(transcript.trim());
+    }
   };
 
   const sendMessage = async () => {
@@ -223,7 +246,7 @@ export default function LiveCall() {
                   <LiveTranscript 
                     currentMessage={currentSpeaker === 'athena' ? currentSpeakerMessage : ''}
                     speaker={currentSpeaker}
-                    isListening={isListening && !hasFinishedSpeaking}
+                    isListening={isListening && !hasFinishedSpeaking && !isProcessingResponse}
                     userTranscript={transcript}
                   />
                 </div>
@@ -243,15 +266,18 @@ export default function LiveCall() {
                         />
                       </div>
                     )}
-                    {/* Speaking indicators */}
+                    {/* Status indicators */}
                     {isUserSpeaking && (
-                      <div className="absolute top-1 left-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                      <div className="absolute top-1 left-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Speaking" />
                     )}
-                    {isListening && !hasFinishedSpeaking && (
-                      <div className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                    {isListening && !hasFinishedSpeaking && !isProcessingResponse && (
+                      <div className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" title="Listening" />
                     )}
-                    {hasFinishedSpeaking && (
-                      <div className="absolute top-1 right-1 w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
+                    {hasFinishedSpeaking && !isProcessingResponse && (
+                      <div className="absolute top-1 right-1 w-2 h-2 bg-yellow-500 rounded-full animate-pulse" title="Processing" />
+                    )}
+                    {isProcessingResponse && (
+                      <div className="absolute top-1 right-1 w-2 h-2 bg-purple-500 rounded-full animate-pulse" title="Athena thinking" />
                     )}
                   </div>
                 ) : (
@@ -305,15 +331,13 @@ export default function LiveCall() {
                   aria-label={isMicOn ? 'Mute microphone' : 'Unmute microphone'}
                 >
                   {isMicOn ? <Mic className="w-4 h-4 sm:w-5 sm:h-5" /> : <MicOff className="w-4 h-4 sm:w-5 sm:h-5" />}
-                  {/* Recording indicator */}
+                  {/* Status indicators */}
                   {isRecording && (
                     <div className="absolute -top-1 -right-1 w-2 h-2 sm:w-3 sm:h-3 bg-red-500 rounded-full animate-pulse" />
                   )}
-                  {/* Listening indicator */}
                   {isListening && !hasFinishedSpeaking && (
                     <div className="absolute -top-1 -left-1 w-2 h-2 sm:w-3 sm:h-3 bg-blue-500 rounded-full animate-pulse" />
                   )}
-                  {/* Finished speaking indicator */}
                   {hasFinishedSpeaking && (
                     <div className="absolute -top-1 -left-1 w-2 h-2 sm:w-3 sm:h-3 bg-yellow-500 rounded-full animate-pulse" />
                   )}
@@ -414,7 +438,7 @@ export default function LiveCall() {
             ))}
             
             {/* Show current transcript if user is speaking */}
-            {transcript && isListening && !hasFinishedSpeaking && (
+            {transcript && isListening && !hasFinishedSpeaking && !isProcessingResponse && (
               <div className="text-right">
                 <div className="inline-block max-w-[85%] sm:max-w-[80%] p-2 sm:p-3 rounded-lg bg-blue-100 text-blue-900 border-2 border-blue-300">
                   <p className="text-xs sm:text-sm">{transcript}</p>
@@ -427,7 +451,7 @@ export default function LiveCall() {
             )}
 
             {/* Show when speech is finished and being processed */}
-            {hasFinishedSpeaking && transcript && (
+            {hasFinishedSpeaking && transcript && !isProcessingResponse && (
               <div className="text-right">
                 <div className="inline-block max-w-[85%] sm:max-w-[80%] p-2 sm:p-3 rounded-lg bg-yellow-100 text-yellow-900 border-2 border-yellow-300">
                   <p className="text-xs sm:text-sm">{transcript}</p>
@@ -475,16 +499,18 @@ export default function LiveCall() {
                 </button>
               </div>
               <div className="mt-2 text-xs text-gray-500 text-center">
-                {isUserSpeaking ? (
-                  <span className="text-green-600 font-medium">🎤 Speaking detected</span>
+                {isProcessingResponse ? (
+                  <span className="text-purple-600 font-medium">🤖 Athena is thinking...</span>
                 ) : hasFinishedSpeaking ? (
                   <span className="text-yellow-600 font-medium">⏳ Processing your speech...</span>
-                ) : isListening ? (
+                ) : isUserSpeaking ? (
+                  <span className="text-green-600 font-medium">🎤 Speaking detected</span>
+                ) : isListening && isMicOn ? (
                   <span className="text-blue-600 font-medium">🎧 Listening for speech...</span>
-                ) : isRecording ? (
+                ) : isMicOn ? (
                   'Ready to listen - start speaking'
                 ) : (
-                  'Click mic to speak or type your question'
+                  'Microphone muted - click to unmute or type your question'
                 )}
               </div>
             </div>
