@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Accessibility Styles */
+.high-contrast {
+  --tw-bg-white: #000000;
+  --tw-text-gray-900: #ffffff;
+  --tw-text-gray-600: #cccccc;
+  --tw-text-gray-500: #aaaaaa;
+  --tw-bg-gray-50: #1a1a1a;
+  --tw-bg-gray-100: #2a2a2a;
+  --tw-border-gray-200: #444444;
+  --tw-border-gray-300: #666666;
+}
+
+.high-contrast * {
+  background-color: var(--tw-bg-white, theme('colors.white')) !important;
+  color: var(--tw-text-gray-900, theme('colors.gray.900')) !important;
+  border-color: var(--tw-border-gray-300, theme('colors.gray.300')) !important;
+}
+
+.high-contrast .bg-primary-600,
+.high-contrast .bg-primary-700 {
+  background-color: #0066cc !important;
+  color: #ffffff !important;
+}
+
+.high-contrast .text-primary-600 {
+  color: #0088ff !important;
+}
+
+.large-text {
+  font-size: 1.25rem !important;
+}
+
+.large-text h1 {
+  font-size: 2.5rem !important;
+}
+
+.large-text h2 {
+  font-size: 2rem !important;
+}
+
+.large-text h3 {
+  font-size: 1.75rem !important;
+}
+
+.large-text button,
+.large-text input,
+.large-text select {
+  font-size: 1.25rem !important;
+  padding: 1rem !important;
+}
+
+.reduced-motion * {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+/* Screen reader only content */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
