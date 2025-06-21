@@ -10,12 +10,14 @@ interface UseAudioRecordingReturn {
   transcript: string;
   clearTranscript: () => void;
   isSpeaking: boolean;
+  hasFinishedSpeaking: boolean;
 }
 
 export function useAudioRecording(): UseAudioRecordingReturn {
   const [isRecording, setIsRecording] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [hasFinishedSpeaking, setHasFinishedSpeaking] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [transcript, setTranscript] = useState('');
@@ -28,12 +30,12 @@ export function useAudioRecording(): UseAudioRecordingReturn {
   const streamRef = useRef<MediaStream | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const speechTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSpeechTimeRef = useRef<number>(0);
+  const finalTranscriptRef = useRef<string>('');
 
-  const SILENCE_THRESHOLD = 0.01; // Audio level threshold for silence
-  const SILENCE_DURATION = 2000; // 2 seconds of silence before stopping
-  const MIN_SPEECH_DURATION = 500; // Minimum speech duration before processing
+  const SILENCE_THRESHOLD = 0.02; // Audio level threshold for silence
+  const SILENCE_DURATION = 2500; // 2.5 seconds of silence before considering speech finished
+  const MIN_SPEECH_DURATION = 1000; // Minimum 1 second of speech before processing
 
   const detectSilence = useCallback(() => {
     if (!analyserRef.current || !isRecording) return;
@@ -51,7 +53,11 @@ export function useAudioRecording(): UseAudioRecordingReturn {
     
     if (normalizedLevel > SILENCE_THRESHOLD) {
       // User is speaking
-      setIsSpeaking(true);
+      if (!isSpeaking) {
+        setIsSpeaking(true);
+        setHasFinishedSpeaking(false);
+        console.log('Speech detected');
+      }
       lastSpeechTimeRef.current = currentTime;
       
       // Clear any existing silence timeout
@@ -61,22 +67,32 @@ export function useAudioRecording(): UseAudioRecordingReturn {
       }
     } else {
       // Silence detected
-      setIsSpeaking(false);
+      if (isSpeaking) {
+        setIsSpeaking(false);
+        console.log('Silence detected');
+      }
       
-      // Only start silence timeout if we've had some speech
-      if (lastSpeechTimeRef.current > 0 && currentTime - lastSpeechTimeRef.current > MIN_SPEECH_DURATION) {
+      // Only start silence timeout if we've had meaningful speech
+      const speechDuration = currentTime - lastSpeechTimeRef.current;
+      if (lastSpeechTimeRef.current > 0 && speechDuration < SILENCE_DURATION && finalTranscriptRef.current.trim()) {
         if (!silenceTimeoutRef.current) {
+          console.log('Starting silence timeout...');
           silenceTimeoutRef.current = setTimeout(() => {
             // User has stopped speaking for SILENCE_DURATION
-            if (transcript.trim()) {
-              // Process the transcript
-              console.log('Speech ended, processing transcript:', transcript);
-              setIsListening(false);
+            const totalSpeechTime = Date.now() - (lastSpeechTimeRef.current - speechDuration);
+            
+            if (finalTranscriptRef.current.trim() && totalSpeechTime > MIN_SPEECH_DURATION) {
+              console.log('Speech finished, processing transcript:', finalTranscriptRef.current);
+              setHasFinishedSpeaking(true);
+              setTranscript(finalTranscriptRef.current);
               
-              // Reset for next speech
+              // Reset for next speech after a delay
               setTimeout(() => {
                 if (isRecording) {
-                  setIsListening(true);
+                  console.log('Ready for next speech');
+                  finalTranscriptRef.current = '';
+                  setHasFinishedSpeaking(false);
+                  setTranscript('');
                   lastSpeechTimeRef.current = 0;
                 }
               }, 1000);
@@ -90,14 +106,16 @@ export function useAudioRecording(): UseAudioRecordingReturn {
     if (isRecording) {
       animationFrameRef.current = requestAnimationFrame(detectSilence);
     }
-  }, [isRecording, transcript]);
+  }, [isRecording, isSpeaking]);
 
   const startRecording = useCallback(async () => {
     try {
       setError(null);
       setTranscript('');
       setIsSpeaking(false);
+      setHasFinishedSpeaking(false);
       lastSpeechTimeRef.current = 0;
+      finalTranscriptRef.current = '';
       
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Audio recording not supported in this browser');
@@ -121,7 +139,7 @@ export function useAudioRecording(): UseAudioRecordingReturn {
         const source = audioContextRef.current.createMediaStreamSource(stream);
         source.connect(analyserRef.current);
         
-        analyserRef.current.fftSize = 256;
+        analyserRef.current.fftSize = 512;
         analyserRef.current.smoothingTimeConstant = 0.8;
 
         // Start silence detection
@@ -158,13 +176,16 @@ export function useAudioRecording(): UseAudioRecordingReturn {
             }
           }
           
-          // Update transcript with both final and interim results
-          const fullTranscript = finalTranscript + interimTranscript;
-          setTranscript(fullTranscript);
-          
-          // If we have final results, mark as having speech
+          // Update final transcript reference for silence detection
           if (finalTranscript) {
-            lastSpeechTimeRef.current = Date.now();
+            finalTranscriptRef.current += finalTranscript;
+            console.log('Final transcript updated:', finalTranscriptRef.current);
+          }
+          
+          // Only show interim results while speaking, don't process them
+          if (!hasFinishedSpeaking) {
+            const displayTranscript = finalTranscriptRef.current + interimTranscript;
+            setTranscript(displayTranscript);
           }
         };
         
@@ -177,10 +198,14 @@ export function useAudioRecording(): UseAudioRecordingReturn {
         
         recognitionRef.current.onend = () => {
           console.log('Speech recognition ended');
-          // Restart recognition if still recording
-          if (isRecording && recognitionRef.current) {
+          // Restart recognition if still recording and not processing
+          if (isRecording && !hasFinishedSpeaking && recognitionRef.current) {
             try {
-              recognitionRef.current.start();
+              setTimeout(() => {
+                if (recognitionRef.current && isRecording) {
+                  recognitionRef.current.start();
+                }
+              }, 100);
             } catch (e) {
               console.warn('Failed to restart speech recognition:', e);
             }
@@ -225,14 +250,14 @@ export function useAudioRecording(): UseAudioRecordingReturn {
       }
 
       setIsRecording(true);
-      console.log('Recording started with silence detection');
+      console.log('Recording started with improved speech detection');
       
     } catch (err) {
       console.error('Error starting recording:', err);
       setError(err instanceof Error ? err.message : 'Failed to access microphone');
       setIsRecording(false);
     }
-  }, [isRecording, detectSilence]);
+  }, [isRecording, detectSilence, hasFinishedSpeaking]);
 
   const stopRecording = useCallback(async (): Promise<Blob | null> => {
     return new Promise((resolve) => {
@@ -240,10 +265,6 @@ export function useAudioRecording(): UseAudioRecordingReturn {
       if (silenceTimeoutRef.current) {
         clearTimeout(silenceTimeoutRef.current);
         silenceTimeoutRef.current = null;
-      }
-      if (speechTimeoutRef.current) {
-        clearTimeout(speechTimeoutRef.current);
-        speechTimeoutRef.current = null;
       }
 
       // Stop speech recognition
@@ -275,8 +296,10 @@ export function useAudioRecording(): UseAudioRecordingReturn {
         setIsRecording(false);
         setIsListening(false);
         setIsSpeaking(false);
+        setHasFinishedSpeaking(false);
         setAudioLevel(0);
         lastSpeechTimeRef.current = 0;
+        finalTranscriptRef.current = '';
         console.log('Recording stopped, blob size:', audioBlob.size);
         resolve(audioBlob);
       };
@@ -287,6 +310,8 @@ export function useAudioRecording(): UseAudioRecordingReturn {
 
   const clearTranscript = useCallback(() => {
     setTranscript('');
+    setHasFinishedSpeaking(false);
+    finalTranscriptRef.current = '';
     lastSpeechTimeRef.current = 0;
   }, []);
 
@@ -299,6 +324,7 @@ export function useAudioRecording(): UseAudioRecordingReturn {
     isListening,
     transcript,
     clearTranscript,
-    isSpeaking
+    isSpeaking,
+    hasFinishedSpeaking
   };
 }

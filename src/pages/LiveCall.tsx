@@ -45,7 +45,8 @@ export default function LiveCall() {
     isListening,
     transcript,
     clearTranscript,
-    isSpeaking: isUserSpeaking
+    isSpeaking: isUserSpeaking,
+    hasFinishedSpeaking
   } = useAudioRecording();
   const { speak, stop: stopSpeaking, isSpeaking: isAthenaSpeaking, error: speechError } = useTextToSpeech();
 
@@ -58,16 +59,21 @@ export default function LiveCall() {
     }
   }, [isCallActive, isMicOn, isRecording, startRecording, stopRecording]);
 
-  // Process transcript when user stops speaking (handled by improved useAudioRecording)
+  // Process transcript ONLY when user has finished speaking
   useEffect(() => {
-    if (transcript && !isListening && transcript.trim().length > 0 && !isProcessingResponse) {
+    if (hasFinishedSpeaking && transcript && transcript.trim().length > 0 && !isProcessingResponse) {
+      console.log('Processing finished speech:', transcript);
       processUserMessage(transcript.trim());
     }
-  }, [transcript, isListening, isProcessingResponse]);
+  }, [hasFinishedSpeaking, transcript, isProcessingResponse]);
 
   const processUserMessage = async (message: string) => {
-    if (isProcessingResponse) return;
+    if (isProcessingResponse) {
+      console.log('Already processing, ignoring:', message);
+      return;
+    }
     
+    console.log('Starting to process message:', message);
     setIsProcessingResponse(true);
     
     // Add user message to conversation
@@ -217,7 +223,7 @@ export default function LiveCall() {
                   <LiveTranscript 
                     currentMessage={currentSpeaker === 'athena' ? currentSpeakerMessage : ''}
                     speaker={currentSpeaker}
-                    isListening={isListening && currentSpeaker === 'user'}
+                    isListening={isListening && !hasFinishedSpeaking}
                     userTranscript={transcript}
                   />
                 </div>
@@ -241,8 +247,11 @@ export default function LiveCall() {
                     {isUserSpeaking && (
                       <div className="absolute top-1 left-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
                     )}
-                    {isListening && (
+                    {isListening && !hasFinishedSpeaking && (
                       <div className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                    )}
+                    {hasFinishedSpeaking && (
+                      <div className="absolute top-1 right-1 w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
                     )}
                   </div>
                 ) : (
@@ -301,8 +310,12 @@ export default function LiveCall() {
                     <div className="absolute -top-1 -right-1 w-2 h-2 sm:w-3 sm:h-3 bg-red-500 rounded-full animate-pulse" />
                   )}
                   {/* Listening indicator */}
-                  {isListening && (
+                  {isListening && !hasFinishedSpeaking && (
                     <div className="absolute -top-1 -left-1 w-2 h-2 sm:w-3 sm:h-3 bg-blue-500 rounded-full animate-pulse" />
+                  )}
+                  {/* Finished speaking indicator */}
+                  {hasFinishedSpeaking && (
+                    <div className="absolute -top-1 -left-1 w-2 h-2 sm:w-3 sm:h-3 bg-yellow-500 rounded-full animate-pulse" />
                   )}
                 </button>
                 
@@ -401,13 +414,26 @@ export default function LiveCall() {
             ))}
             
             {/* Show current transcript if user is speaking */}
-            {transcript && isListening && (
+            {transcript && isListening && !hasFinishedSpeaking && (
               <div className="text-right">
                 <div className="inline-block max-w-[85%] sm:max-w-[80%] p-2 sm:p-3 rounded-lg bg-blue-100 text-blue-900 border-2 border-blue-300">
                   <p className="text-xs sm:text-sm">{transcript}</p>
                   <div className="text-xs text-blue-600 mt-1 flex items-center justify-end space-x-1">
                     <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
                     <span>Speaking...</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Show when speech is finished and being processed */}
+            {hasFinishedSpeaking && transcript && (
+              <div className="text-right">
+                <div className="inline-block max-w-[85%] sm:max-w-[80%] p-2 sm:p-3 rounded-lg bg-yellow-100 text-yellow-900 border-2 border-yellow-300">
+                  <p className="text-xs sm:text-sm">{transcript}</p>
+                  <div className="text-xs text-yellow-600 mt-1 flex items-center justify-end space-x-1">
+                    <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
+                    <span>Processing...</span>
                   </div>
                 </div>
               </div>
@@ -451,6 +477,8 @@ export default function LiveCall() {
               <div className="mt-2 text-xs text-gray-500 text-center">
                 {isUserSpeaking ? (
                   <span className="text-green-600 font-medium">🎤 Speaking detected</span>
+                ) : hasFinishedSpeaking ? (
+                  <span className="text-yellow-600 font-medium">⏳ Processing your speech...</span>
                 ) : isListening ? (
                   <span className="text-blue-600 font-medium">🎧 Listening for speech...</span>
                 ) : isRecording ? (
